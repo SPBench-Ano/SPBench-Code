@@ -1,0 +1,107 @@
+experiment:
+  name: interp_unet_base
+  output_dir: results       # Relative to repo root, or absolute (e.g., /data/experiments)
+  seed: 42
+  device: cuda
+
+data:
+  # Supported formats: segy, npy, mat (pick one block)
+  segy:
+    path: /cloud/cloud-ssd1/SEGC3/SEG_45Shot_shots1-9.sgy
+    traces_per_shot: 201
+    time_downsample: 1
+  # npy:
+  #   path: /data/shared/SEGC3/SEG_45Shot_shots1-9.npy
+  # mat:
+  #   path: /data/shared/SEGC3/SEG_45Shot_shots1-9.mat
+  #   key: shots   # optional variable name
+  # Shot-level split: uncomment to split by FFID instead of patch-level random split.
+  # When present, test_ratio is ignored. Splits are performed on unique FFID values
+  # in sequential order (first N FFIDs -> train, next M -> val, remaining -> test).
+  # shot_split:
+  #   train: 7
+  #   val: 1
+  #   test: 1
+  test_ratio: 0.1
+  loader:
+    batch_size: 192
+    num_workers: 4
+    pin_memory: true
+
+preprocess:
+  dt: 0.002
+  t0: 0.0
+  spherical_power: 1.2
+  uniform_stride: 2
+  normalize_mode: max_abs
+  normalize_scope: global
+  patch_time: 256     # time axis
+  patch_trace: 128    # trace axis
+  patch_overlap: 0.5
+  max_shots: null     # set int for quick debug
+  # skip: []           # optional: list steps to skip, e.g. ["spherical_divergence_correction", "normalize", "mask_traces"]
+
+model:
+  type: unet
+  params:
+    in_channels: 1
+    out_channels: 1
+    base_channels: 32
+    depth: 4
+
+loss:
+  type: mse
+  params:
+    reduction: mean
+    
+metrics:
+  - name: snr
+    params: { reduction: per_sample }
+  - name: psnr
+    params: { data_range: 1.0, reduction: per_sample }
+  - name: ssim
+    params: { data_range: 2.0, window_size: 11, sigma: 1.5 }
+  - name: mse
+    params: {}
+
+optim:
+  type: adamw
+  params:
+    lr: 1.0e-3
+    weight_decay: 1.0e-4
+
+scheduler:
+  type: cosine
+  params:
+    min_lr: 1.0e-6
+
+train:
+  epochs: 200
+  grad_clip: 1.0
+  log_step: false      # false: 仅每个 epoch 输出一次；true: 额外输出 step 日志
+  log_interval: 20     # 仅在 log_step=true 时生效
+  eval_interval: 1      # 每 N 个 epoch 在测试集上 evaluate 一次
+  ckpt_interval: 5
+  vis_interval: 5       # 每 N 个 epoch 可视化一次测试集随机样本
+  resume: null
+
+log:
+  log_dir: logs
+  plot_interval: 5
+
+inference:
+  # Separate data source for inference (avoids overlap with training data).
+  # If omitted, falls back to ``data`` (same as training).
+  data:
+    segy:
+      path: /cloud/cloud-ssd1/SEGC3/SEG_45Shot_shots10-18.sgy   # TODO: replace with independent inference volume
+      traces_per_shot: 201
+      time_downsample: 1
+  checkpoint: results/interp_unet_base/checkpoints/epoch_200.pt
+  output_dir: results/interp_unet_base/inference
+  n_viz_shots: 5
+  # batch_size: null    # null -> use data.loader.batch_size
+  # save_npy: false     # true -> save pred/input/target as .npy
+  # seed: null          # null -> use experiment.seed
+  device: 1    # null -> use experiment.device
+  batch_size: 4

@@ -1,0 +1,118 @@
+experiment:
+  name: random_noise_res_unet_base
+  output_dir: /data/pcdisk0/data/results/random_noise       # Relative to repo root, or absolute (e.g., /data/experiments)
+  seed: 42
+  device: cuda
+
+data:
+  # Supported formats: segy, npy, mat (pick one block)
+  segy:
+    path: /data/pcdisk0/data/SEG_45Shot_shots1-9.sgy
+    traces_per_shot: 201
+    time_downsample: 1
+  # npy:
+  #   path: /data/shared/SEGC3/SEG_45Shot_shots1-9.npy
+  # mat:
+  #   path: /data/shared/SEGC3/SEG_45Shot_shots1-9.mat
+  #   key: shots   # optional variable name
+  # Shot-level split: uncomment to split by FFID instead of patch-level random split.
+  # When present, test_ratio is ignored. Splits are performed on unique FFID values
+  # in sequential order (first N FFIDs -> train, next M -> val, remaining -> test).
+  shot_split:
+    train: 7
+    val: 1
+    test: 1
+  # test_ratio: 0.1
+  loader:
+    batch_size: 192
+    num_workers: 4
+    pin_memory: true
+
+preprocess:
+  dt: 0.002
+  t0: 0.0
+  spherical_power: 0
+  noise_kind: gaussian   # "gaussian" | "poisson"; train_denoise_unet.sh may overwrite this per run.
+  snr_db: 5.0            # Default only; train_denoise_unet.sh may overwrite this per run.
+  normalize_mode: max_abs
+  normalize_scope: shot
+  patch_time: 256     # time axis
+  patch_trace: 128    # trace axis
+  patch_overlap: 0.5
+  max_shots: null     # set int for quick debug
+  skip: ["spherical_divergence_correction"]            # optional: list steps to skip, e.g. ["spherical_divergence_correction", "normalize", "add_noise"]
+
+model:
+  type: res_unet
+  params:
+    in_channels: 1
+    out_channels: 1
+    base_channels: 32
+    depth: 4
+
+loss:
+  type: mse
+  params:
+    reduction: mean
+
+metrics:
+  - name: snr
+    params: { reduction: per_sample }
+  - name: psnr
+    params: { data_range: 1.0, reduction: per_sample }
+  - name: ssim
+    params: { data_range: 2.0, window_size: 11, sigma: 1.5 }
+  - name: mae
+    params: {}
+  - name: mse
+    params: {}
+  - name: rmse
+    params: { reduction: per_sample }
+
+optim:
+  type: adamw
+  params:
+    lr: 1.0e-4
+    weight_decay: 1.0e-5
+
+scheduler:
+  type: cosine
+  params:
+    min_lr: 1.0e-6
+
+train:
+  epochs: 200
+  grad_clip: 1.0
+  log_step: false
+  log_interval: 10
+  eval_interval: 1
+  ckpt_interval: 20
+  vis_interval: 5
+  resume: null
+
+log:
+  log_dir: logs
+  plot_interval: 5
+
+
+inference:
+  # Inference re-loads the raw volume, then applies this shot-level split to
+  # select the held-out test shots before preprocessing, noise injection,
+  # denoising, and inverse transforms for visualization.
+  data:
+    segy:
+      path: /data/pcdisk0/data/SEG_45Shot_shots1-9.sgy
+      traces_per_shot: 201
+      time_downsample: 1
+  shot_split:
+    train: 7
+    val: 1
+    test: 1
+  checkpoint: /data/pcdisk0/data/results/random_noise/random_noise_res_unet_base/checkpoints/best.pt
+  output_dir: /data/pcdisk0/data/results/random_noise/random_noise_res_unet_base/inference
+  n_viz_shots: 5
+  # batch_size: null    # null -> use data.loader.batch_size
+  # save_npy: false     # true -> save pred/input/target as .npy
+  # seed: null          # null -> use experiment.seed
+  device: cuda:0
+  batch_size: 192

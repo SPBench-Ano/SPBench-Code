@@ -1,0 +1,87 @@
+# Default configuration template.
+# Copy this file to configs/<exp_name>.yaml and edit it for a new experiment.
+#
+# Convention:
+#   Every pluggable component is declared as
+#     { type: <registered_name>, params: { ... } }
+#   so that scripts/train.py stays generic: it only calls build_* factories
+#   and never imports a concrete implementation.
+
+experiment:
+  name: placeholder_exp     # Sub-directory name under output_dir
+  output_dir: results       # Relative to repo root, or absolute (e.g., /data/experiments)
+  seed: 42
+  device: cuda              # "cuda" | "cpu" | "cuda:0"
+  # mixed_precision: fp16   # Uncomment when AMP is wired in
+
+data:
+  train:
+    type: npy               # Registered dataset name (see utils/datasets.py)
+    params:
+      root: /path/to/train  # TODO: fill in real path
+      input_key: data       # Key inside .npz / .mat file for inputs
+      target_key: label     # Key for targets; set to null for self-supervised
+      transforms: []        # List of transform dicts, each { type, params }
+    loader:
+      batch_size: 16
+      num_workers: 4
+      shuffle: true
+      pin_memory: true
+      drop_last: true
+  val:
+    type: npy
+    params:
+      root: /path/to/val
+      input_key: data
+      target_key: label
+      transforms: []
+    loader:
+      batch_size: 16
+      num_workers: 4
+      shuffle: false
+      pin_memory: true
+      drop_last: false
+
+model:
+  type: placeholder         # Registered model name (see model/registry.py)
+  params:
+    in_channels: 1
+    hidden_dim: 64
+
+loss:
+  type: mse                 # Registered loss name (see utils/losses.py)
+  params: {}
+
+metrics:
+  # List of registered metric names; build_metrics returns a dict keyed by name.
+  - name: psnr
+    params: {}
+  - name: mae
+    params: {}
+
+optim:
+  type: adamw               # "sgd" | "adam" | "adamw"
+  params:
+    lr: 1.0e-4
+    weight_decay: 0.05
+    betas: [0.9, 0.999]
+
+scheduler:
+  type: cosine              # "cosine" | "step" | "none"
+  params:
+    warmup_epochs: 5
+    min_lr: 1.0e-6
+
+train:
+  epochs: 100
+  grad_clip: 1.0            # Set to null / 0 to disable
+  log_interval: 50          # Steps between console logs
+  eval_interval: 5          # Run evaluation every N epochs
+  ckpt_interval: 10         # Save checkpoint every N epochs
+  vis_interval: 10          # Save visualizations every N epochs
+  resume: null              # Path to checkpoint to resume from, or null
+
+log:
+  use_tensorboard: false    # Reserved; not wired yet
+  log_dir: logs             # Relative to experiment.output_dir/<name>/
+  plot_interval: 5          # Refresh loss_curve.png / metrics_curve.png every N epochs (0 = disable)
